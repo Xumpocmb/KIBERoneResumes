@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import api
 from database import init_db, close_db
-from admin import admin_app
 from config import settings
+from admin import router as admin_router # Import the new admin router
 
 # Create FastAPI application
 app = FastAPI(
@@ -24,8 +24,8 @@ app.add_middleware(
 # Include API router
 app.include_router(api.router, prefix="/api/v1")
 
-# Include admin panel
-app.mount("/admin", admin_app)
+# Include the custom admin router
+app.include_router(admin_router, prefix="/admin")
 
 @app.on_event("startup")
 async def startup_event():

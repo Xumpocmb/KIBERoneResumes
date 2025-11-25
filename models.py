@@ -4,13 +4,11 @@ from datetime import datetime
 
 class TutorProfile(Model):
     id = fields.IntField(pk=True)
-    username = fields.CharField(max_length=255, unique=True, index=True)
     tutor_crm_id = fields.CharField(max_length=255, null=True, unique=True)
     tutor_name = fields.CharField(max_length=255, null=True)
     branch = fields.CharField(max_length=255, null=True)  # This could be a foreign key to a Branch model if needed
     is_senior = fields.BooleanField(default=False)
-    # Add password field for authentication
-    hashed_password = fields.CharField(max_length=255)
+    phone_number = fields.CharField(max_length=20, unique=True)  # Phone number for authentication
 
 
 class Resume(Model):

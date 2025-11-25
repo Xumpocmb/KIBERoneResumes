@@ -15,26 +15,34 @@ router = APIRouter()
 # Tutor endpoints
 @router.post("/tutors/register/", response_model=schemas.TutorProfileResponse)
 async def register_tutor(
-    tutor: schemas.TutorProfileCreate
+    register_data: schemas.TutorRegisterRequest
 ):
-    # Check if tutor with this username already exists
-    existing_tutor = await auth.get_tutor_by_username(tutor.username)
-    if existing_tutor:
+    existing_phone_tutor = await auth.get_tutor_by_phone_number(register_data.phone_number)
+    if existing_phone_tutor:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered"
+            detail="Phone number already registered"
         )
-    
-    # Create new tutor profile with hashed password
+
+    tutor_data = await get_tutor_data_from_crm(register_data.phone_number, register_data.tutor_branch_id)
+
+    if not tutor_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tutor not found in CRM"
+        )
+
+    tutor_crm_id = tutor_data.get("id", None)
+    tutor_name = tutor_data.get("name", None)
+
     db_tutor = await models.TutorProfile.create(
-        username=tutor.username,
-        tutor_crm_id=tutor.tutor_crm_id,
-        tutor_name=tutor.tutor_name,
-        branch=tutor.branch,
-        is_senior=tutor.is_senior,
-        hashed_password=auth.get_password_hash(tutor.password)  # Use password from request
+        tutor_crm_id=tutor_crm_id,
+        tutor_name=tutor_name,
+        branch=register_data.tutor_branch_id,
+        is_senior=False,
+        phone_number=register_data.phone_number
     )
-    
+
     return db_tutor
 
 
@@ -42,15 +50,16 @@ async def register_tutor(
 async def login_tutor(
     tutor_login: schemas.TutorLogin
 ):
-    tutor = await auth.authenticate_tutor(tutor_login.username, tutor_login.password)
+    tutor = await auth.authenticate_tutor(tutor_login.phone_number)
     if not tutor:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect phone number",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token = auth.create_access_token(data={"sub": tutor.username})
+    # Since we don't have username, we'll use phone number as the subject
+    access_token = auth.create_access_token(data={"sub": tutor.phone_number})
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -59,8 +68,8 @@ async def get_tutor_groups(
     current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
 ):
     # Integrate with CRM to get tutor's groups
-    if current_tutor.tutor_crm_id:
-        groups_data = await get_tutor_groups_from_crm(current_tutor.tutor_crm_id)
+    if current_tutor.tutor_crm_id and current_tutor.branch:
+        groups_data = await get_tutor_groups_from_crm(current_tutor.tutor_crm_id, current_tutor.branch)
         if groups_data:
             return groups_data
     
@@ -70,14 +79,14 @@ async def get_tutor_groups(
 
 @router.get("/groups/clients/")
 async def get_group_clients(
-    group_id: str,  # Added group_id parameter
+    group_id: str,
     current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
 ):
-    # Integrate with CRM to get group clients
-    clients_data = await get_group_clients_from_crm(group_id)
-    if clients_data:
-        return clients_data
-    
+    if current_tutor.branch:
+        clients_data = await get_group_clients_from_crm(group_id, current_tutor.branch)
+        if clients_data:
+            return clients_data
+
     # Fallback response if CRM integration fails
     return {"clients": []}
 
@@ -190,6 +199,21 @@ async def get_parent_reviews(
     return reviews
 
 
+# Tutor endpoints (additional)
+@router.get("/tutors/detail/")
+async def get_tutor_detail(
+    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
+):
+    # Integrate with CRM to get tutor details
+    if current_tutor.tutor_crm_id and current_tutor.branch:
+        tutor_data = await get_tutor_data_from_crm(current_tutor.tutor_crm_id, current_tutor.branch)
+        if tutor_data:
+            return tutor_data
+    
+    # Fallback response if CRM integration fails
+    return {"tutor_detail": {}}
+
+
 # Client endpoints
 @router.get("/clients/detail/")
 async def get_client_detail(
@@ -197,9 +221,10 @@ async def get_client_detail(
     current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
 ):
     # Integrate with CRM to get client details
-    client_data = await get_client_data_from_crm(student_crm_id)
-    if client_data:
-        return client_data
+    if current_tutor.branch:
+        client_data = await get_client_data_from_crm(student_crm_id, current_tutor.branch)
+        if client_data:
+            return client_data
     
     # Fallback response if CRM integration fails
     return {"client_detail": {}}

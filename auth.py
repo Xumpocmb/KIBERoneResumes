@@ -14,6 +14,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Security scheme for authentication
 security = HTTPBearer()
 
+# Password functions are no longer needed since we're using phone number authentication
+# We can keep them if needed for other purposes, but they won't be used for tutor authentication
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password."""
     return pwd_context.verify(plain_password, hashed_password)
@@ -24,15 +26,21 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+# We'll keep the get_tutor_by_username function for backward compatibility if needed elsewhere
 async def get_tutor_by_username(username: str) -> Optional[models.TutorProfile]:
     """Get a tutor by username."""
     return await models.TutorProfile.get_or_none(username=username)
 
 
-async def authenticate_tutor(username: str, password: str) -> Optional[models.TutorProfile]:
-    """Authenticate a tutor by username and password."""
-    tutor = await get_tutor_by_username(username)
-    if not tutor or not verify_password(password, tutor.hashed_password):
+async def get_tutor_by_phone_number(phone_number: str) -> Optional[models.TutorProfile]:
+    """Get a tutor by phone number."""
+    return await models.TutorProfile.get_or_none(phone_number=phone_number)
+
+
+async def authenticate_tutor(phone_number: str) -> Optional[models.TutorProfile]:
+    """Authenticate a tutor by phone number."""
+    tutor = await get_tutor_by_phone_number(phone_number)
+    if not tutor:
         return None
     return tutor
 
@@ -60,13 +68,13 @@ async def get_current_tutor(
     )
     try:
         payload = jwt.decode(credentials.credentials, settings.secret_key, algorithms=[settings.algorithm])
-        username: str = payload.get("sub")
-        if username is None:
+        phone_number: str = payload.get("sub")  # Now using phone number as the subject
+        if phone_number is None:
             raise credentials_exception
-        token_data = schemas.TokenData(username=username)
+        # We can still use TokenData if needed, but now it uses phone_number
     except JWTError:
         raise credentials_exception
-    tutor = await get_tutor_by_username(username=token_data.username)
+    tutor = await get_tutor_by_phone_number(phone_number=phone_number)
     if tutor is None:
         raise credentials_exception
     return tutor

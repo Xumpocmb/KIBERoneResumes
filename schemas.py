@@ -5,7 +5,6 @@ from datetime import datetime
 
 # TutorProfile Schemas
 class TutorProfileBase(BaseModel):
-    username: str
     tutor_crm_id: Optional[str] = None
     tutor_name: Optional[str] = None
     branch: Optional[str] = None
@@ -13,7 +12,12 @@ class TutorProfileBase(BaseModel):
 
 
 class TutorProfileCreate(TutorProfileBase):
-    password: str  # Add password field for registration
+    phone_number: str  # Phone number for authentication
+
+
+class TutorRegisterRequest(BaseModel):
+    phone_number: str  # phone number for authentication
+    tutor_branch_id: str  # branch_id from the front-end
 
 
 class TutorProfileUpdate(BaseModel):
@@ -85,9 +89,8 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    phone_number: Optional[str] = None
 
 
 class TutorLogin(BaseModel):
-    username: str
-    password: str
+    phone_number: str
