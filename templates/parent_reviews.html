@@ -13,7 +13,7 @@
         .add-form input, .add-form textarea { margin-bottom: 10px; padding: 8px; width: calc(50% - 10px); }
         .add-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         .add-form button:hover { background-color: #45a049; }
-        .edit-form { display: none; margin-top: 10px; border: 1px solid #eee; padding: 10px; border-radius: 3px; background-color: #f9f9f9; }
+        .edit-form { margin-top: 10px; border: 1px solid #eee; padding: 10px; border-radius: 3px; background-color: #f9f9f9; }
         .edit-form input, .edit-form textarea { margin-bottom: 5px; padding: 5px; width: calc(50% - 10px); }
         .edit-form button { padding: 8px 12px; background-color: #008CBA; color: white; border: none; cursor: pointer; margin-right: 5px; }
         .edit-form button:hover { background-color: #007bb5; }
@@ -53,7 +53,7 @@
                 <td>{{ review.created_at }}</td>
                 <td>{{ review.updated_at }}</td>
                 <td>
-                    <button onclick="toggleEditForm('{{ review.id }}')">Edit</button>
+                    <button onclick="toggleEditForm('{{ review.id | e }}')">Edit</button>
                     <form action="/admin/parent_reviews/{{ review.id }}/delete" method="post" style="display:inline;">
                         <button type="submit" class="delete-btn">Delete</button>
                     </form>
@@ -64,8 +64,8 @@
                     <div class="edit-form">
                         <h3>Edit Parent Review (ID: {{ review.id }})</h3>
                         <form action="/admin/parent_reviews/{{ review.id }}/update" method="post">
-                            <input type="text" name="student_crm_id" value="{{ review.student_crm_id }}" required>
-                            <textarea name="content">{{ review.content or '' }}</textarea>
+                            <input type="text" name="student_crm_id" value="{{ review.student_crm_id if review.student_crm_id is not none else '' }}" required>
+                            <textarea name="content">{{ review.content if review.content is not none else '' }}</textarea>
                             <button type="submit">Update</button>
                             <button type="button" onclick="toggleEditForm('{{ review.id }}')">Cancel</button>
                         </form>
@@ -78,11 +78,14 @@
 
     <script>
         function toggleEditForm(reviewId) {
-            const form = document.getElementById(`edit-form-${reviewId}`);
-            if (form.style.display === "none") {
-                form.style.display = "table-row";
+            const editRow = document.getElementById(`edit-form-${reviewId}`);
+            const editFormDiv = editRow.querySelector('.edit-form');
+            if (editRow.style.display === "none") {
+                editRow.style.display = "table-row";
+                editFormDiv.style.display = "block";
             } else {
-                form.style.display = "none";
+                editRow.style.display = "none";
+                editFormDiv.style.display = "none";
             }
         }
     </script>

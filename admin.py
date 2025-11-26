@@ -6,16 +6,56 @@ from fastapi.templating import Jinja2Templates
 from models import TutorProfile, Resume, ParentReview
 import auth
 
-router = APIRouter(dependencies=[Depends(auth.get_current_senior_tutor)])
+router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
+# --- Admin Authentication ---
+@router.get("/login", response_class=HTMLResponse)
+async def admin_login_get(request: Request):
+    return templates.TemplateResponse("admin_login.html", {"request": request})
+
+@router.post("/login", response_class=RedirectResponse)
+async def admin_login_post(
+    request: Request,
+    phone_number: str = Form(...)
+):
+    tutor = await auth.get_tutor_by_phone_number(phone_number)
+    if tutor and tutor.is_senior:
+        response = RedirectResponse(url="/admin/tutor_profiles", status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie(key="admin_session", value=f"senior_tutor_{tutor.id}", httponly=True, max_age=3600) # 1 hour session
+        return response
+    
+    # If login fails, redirect back to login page with an error
+    response = RedirectResponse(url="/admin/login?error=true", status_code=status.HTTP_303_SEE_OTHER)
+    return response
+
+@router.post("/logout", response_class=RedirectResponse)
+async def admin_logout(request: Request):
+    response = RedirectResponse(url="/admin/login", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(key="admin_session")
+    return response
+
+# Dependency to check admin session and senior tutor status
+async def get_current_admin_user(request: Request):
+    admin_session = request.cookies.get("admin_session")
+    if not admin_session or not admin_session.startswith("senior_tutor_"):
+        raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, detail="Not authenticated", headers={"Location": "/admin/login"})
+        
+    tutor_id = int(admin_session.split("_")[-1])
+    tutor = await TutorProfile.get_or_none(id=tutor_id)
+    
+    if not tutor or not tutor.is_senior:
+        raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, detail="Not authorized", headers={"Location": "/admin/login"})
+    
+    return tutor
+
 # --- TutorProfile Admin Routes ---
-@router.get("/tutor_profiles", response_class=HTMLResponse)
+@router.get("/tutor_profiles", response_class=HTMLResponse, dependencies=[Depends(get_current_admin_user)])
 async def list_tutor_profiles(request: Request):
     tutors = await TutorProfile.all()
     return templates.TemplateResponse("tutor_profiles.html", {"request": request, "tutors": tutors})
 
-@router.post("/tutor_profiles", response_class=RedirectResponse)
+@router.post("/tutor_profiles", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def add_tutor_profile(
     phone_number: str = Form(...),
     tutor_crm_id: Optional[str] = Form(None),
@@ -36,7 +76,7 @@ async def add_tutor_profile(
     )
     return RedirectResponse(url="/admin/tutor_profiles", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/tutor_profiles/{tutor_id}/update", response_class=RedirectResponse)
+@router.post("/tutor_profiles/{tutor_id}/update", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def update_tutor_profile(
     tutor_id: int,
     phone_number: str = Form(...),
@@ -62,7 +102,7 @@ async def update_tutor_profile(
     await tutor.save()
     return RedirectResponse(url="/admin/tutor_profiles", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/tutor_profiles/{tutor_id}/delete", response_class=RedirectResponse)
+@router.post("/tutor_profiles/{tutor_id}/delete", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def delete_tutor_profile(tutor_id: int):
     tutor = await TutorProfile.get_or_none(id=tutor_id)
     if not tutor:
@@ -71,12 +111,12 @@ async def delete_tutor_profile(tutor_id: int):
     return RedirectResponse(url="/admin/tutor_profiles", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- Resume Admin Routes ---
-@router.get("/resumes", response_class=HTMLResponse)
+@router.get("/resumes", response_class=HTMLResponse, dependencies=[Depends(get_current_admin_user)])
 async def list_resumes(request: Request):
     resumes = await Resume.all()
     return templates.TemplateResponse("resumes.html", {"request": request, "resumes": resumes})
 
-@router.post("/resumes", response_class=RedirectResponse)
+@router.post("/resumes", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def add_resume(
     student_crm_id: str = Form(...),
     content: Optional[str] = Form(None),
@@ -89,7 +129,7 @@ async def add_resume(
     )
     return RedirectResponse(url="/admin/resumes", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/resumes/{resume_id}/update", response_class=RedirectResponse)
+@router.post("/resumes/{resume_id}/update", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def update_resume(
     resume_id: int,
     student_crm_id: str = Form(...),
@@ -107,7 +147,7 @@ async def update_resume(
     await resume.save()
     return RedirectResponse(url="/admin/resumes", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/resumes/{resume_id}/delete", response_class=RedirectResponse)
+@router.post("/resumes/{resume_id}/delete", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def delete_resume(resume_id: int):
     resume = await Resume.get_or_none(id=resume_id)
     if not resume:
@@ -116,12 +156,12 @@ async def delete_resume(resume_id: int):
     return RedirectResponse(url="/admin/resumes", status_code=status.HTTP_303_SEE_OTHER)
 
 # --- ParentReview Admin Routes ---
-@router.get("/parent_reviews", response_class=HTMLResponse)
+@router.get("/parent_reviews", response_class=HTMLResponse, dependencies=[Depends(get_current_admin_user)])
 async def list_parent_reviews(request: Request):
     reviews = await ParentReview.all()
     return templates.TemplateResponse("parent_reviews.html", {"request": request, "reviews": reviews})
 
-@router.post("/parent_reviews", response_class=RedirectResponse)
+@router.post("/parent_reviews", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def add_parent_review(
     student_crm_id: str = Form(...),
     content: Optional[str] = Form(None)
@@ -132,7 +172,7 @@ async def add_parent_review(
     )
     return RedirectResponse(url="/admin/parent_reviews", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/parent_reviews/{review_id}/update", response_class=RedirectResponse)
+@router.post("/parent_reviews/{review_id}/update", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def update_parent_review(
     review_id: int,
     student_crm_id: str = Form(...),
@@ -148,7 +188,7 @@ async def update_parent_review(
     await review.save()
     return RedirectResponse(url="/admin/parent_reviews", status_code=status.HTTP_303_SEE_OTHER)
 
-@router.post("/parent_reviews/{review_id}/delete", response_class=RedirectResponse)
+@router.post("/parent_reviews/{review_id}/delete", response_class=RedirectResponse, dependencies=[Depends(get_current_admin_user)])
 async def delete_parent_review(review_id: int):
     review = await ParentReview.get_or_none(id=review_id)
     if not review:

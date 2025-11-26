@@ -13,7 +13,7 @@
         .add-form input, .add-form textarea { margin-bottom: 10px; padding: 8px; width: calc(50% - 10px); }
         .add-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         .add-form button:hover { background-color: #45a049; }
-        .edit-form { display: none; margin-top: 10px; border: 1px solid #eee; padding: 10px; border-radius: 3px; background-color: #f9f9f9; }
+        .edit-form { margin-top: 10px; border: 1px solid #eee; padding: 10px; border-radius: 3px; background-color: #f9f9f9; }
         .edit-form input, .edit-form textarea { margin-bottom: 5px; padding: 5px; width: calc(50% - 10px); }
         .edit-form button { padding: 8px 12px; background-color: #008CBA; color: white; border: none; cursor: pointer; margin-right: 5px; }
         .edit-form button:hover { background-color: #007bb5; }
@@ -56,7 +56,7 @@
                 <td>{{ resume.created_at }}</td>
                 <td>{{ resume.updated_at }}</td>
                 <td>
-                    <button onclick="toggleEditForm('{{ resume.id }}')">Edit</button>
+                    <button onclick="toggleEditForm('{{ resume.id | e }}')">Edit</button>
                     <form action="/admin/resumes/{{ resume.id }}/delete" method="post" style="display:inline;">
                         <button type="submit" class="delete-btn">Delete</button>
                     </form>
@@ -67,8 +67,8 @@
                     <div class="edit-form">
                         <h3>Edit Resume (ID: {{ resume.id }})</h3>
                         <form action="/admin/resumes/{{ resume.id }}/update" method="post">
-                            <input type="text" name="student_crm_id" value="{{ resume.student_crm_id }}" required>
-                            <textarea name="content">{{ resume.content or '' }}</textarea>
+                            <input type="text" name="student_crm_id" value="{{ resume.student_crm_id if resume.student_crm_id is not none else '' }}" required>
+                            <textarea name="content">{{ resume.content if resume.content is not none else '' }}</textarea>
                             <label><input type="checkbox" name="is_verified" {% if resume.is_verified %}checked{% endif %} value="true"> Is Verified</label>
                             <button type="submit">Update</button>
                             <button type="button" onclick="toggleEditForm('{{ resume.id }}')">Cancel</button>
@@ -82,11 +82,14 @@
 
     <script>
         function toggleEditForm(resumeId) {
-            const form = document.getElementById(`edit-form-${resumeId}`);
-            if (form.style.display === "none") {
-                form.style.display = "table-row";
+            const editRow = document.getElementById(`edit-form-${resumeId}`);
+            const editFormDiv = editRow.querySelector('.edit-form');
+            if (editRow.style.display === "none") {
+                editRow.style.display = "table-row";
+                editFormDiv.style.display = "block";
             } else {
-                form.style.display = "none";
+                editRow.style.display = "none";
+                editFormDiv.style.display = "none";
             }
         }
     </script>
