@@ -163,3 +163,7 @@ temp/
 *.sqlite3-shm
 *.sqlite3-wal
 migrations/models/*_init.py
+
+
+fixtures
+secrets

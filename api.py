@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
 import models
 import schemas
 import auth
@@ -87,7 +87,6 @@ async def get_group_clients(
         if clients_data:
             return clients_data
 
-    # Fallback response if CRM integration fails
     return {"clients": []}
 
 
@@ -206,12 +205,31 @@ async def get_tutor_detail(
 ):
     # Integrate with CRM to get tutor details
     if current_tutor.tutor_crm_id and current_tutor.branch:
-        tutor_data = await get_tutor_data_from_crm(current_tutor.tutor_crm_id, current_tutor.branch)
+        tutor_data = await get_tutor_data_from_crm(current_tutor.phone_number, current_tutor.branch)
         if tutor_data:
             return tutor_data
     
     # Fallback response if CRM integration fails
     return {"tutor_detail": {}}
+
+
+# Tutor Management Endpoints (for senior tutors)
+@router.post("/tutors/{tutor_id}/promote-to-senior/", response_model=schemas.TutorProfileResponse)
+async def promote_to_senior(
+    tutor_id: int,
+    current_senior_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
+):
+    """Promote a tutor to senior status (requires an existing senior tutor)."""
+    tutor = await models.TutorProfile.get_or_none(id=tutor_id)
+    if not tutor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tutor not found"
+        )
+    
+    tutor.is_senior = True
+    await tutor.save()
+    return tutor
 
 
 # Client endpoints

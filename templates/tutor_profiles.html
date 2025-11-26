@@ -13,7 +13,7 @@
         .add-form input { margin-bottom: 10px; padding: 8px; width: calc(50% - 10px); }
         .add-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         .add-form button:hover { background-color: #45a049; }
-        .edit-form { display: none; margin-top: 10px; border: 1px solid #eee; padding: 10px; border-radius: 3px; background-color: #f9f9f9; }
+        .edit-form { margin-top: 10px; border: 1px solid #eee; padding: 10px; border-radius: 3px; background-color: #f9f9f9; }
         .edit-form input { margin-bottom: 5px; padding: 5px; width: calc(50% - 10px); }
         .edit-form button { padding: 8px 12px; background-color: #008CBA; color: white; border: none; cursor: pointer; margin-right: 5px; }
         .edit-form button:hover { background-color: #007bb5; }
@@ -58,7 +58,7 @@
                 <td>{{ tutor.branch }}</td>
                 <td>{{ tutor.is_senior }}</td>
                 <td>
-                    <button onclick="toggleEditForm('{{ tutor.id }}')">Edit</button>
+                    <button onclick="toggleEditForm('{{ tutor.id | e }}')">Edit</button>
                     <form action="/admin/tutor_profiles/{{ tutor.id }}/delete" method="post" style="display:inline;">
                         <button type="submit" class="delete-btn">Delete</button>
                     </form>
@@ -69,10 +69,10 @@
                     <div class="edit-form">
                         <h3>Edit Tutor Profile (ID: {{ tutor.id }})</h3>
                         <form action="/admin/tutor_profiles/{{ tutor.id }}/update" method="post">
-                            <input type="text" name="phone_number" value="{{ tutor.phone_number }}" required>
-                            <input type="text" name="tutor_crm_id" value="{{ tutor.tutor_crm_id or '' }}">
-                            <input type="text" name="tutor_name" value="{{ tutor.tutor_name or '' }}">
-                            <input type="text" name="branch" value="{{ tutor.branch or '' }}">
+                            <input type="text" name="phone_number" value="{{ tutor.phone_number if tutor.phone_number is not none else '' }}" required>
+                            <input type="text" name="tutor_crm_id" value="{{ tutor.tutor_crm_id if tutor.tutor_crm_id is not none else '' }}">
+                            <input type="text" name="tutor_name" value="{{ tutor.tutor_name if tutor.tutor_name is not none else '' }}">
+                            <input type="text" name="branch" value="{{ tutor.branch if tutor.branch is not none else '' }}">
                             <label><input type="checkbox" name="is_senior" {% if tutor.is_senior %}checked{% endif %} value="true"> Is Senior</label>
                             <button type="submit">Update</button>
                             <button type="button" onclick="toggleEditForm('{{ tutor.id }}')">Cancel</button>
@@ -86,11 +86,14 @@
 
     <script>
         function toggleEditForm(tutorId) {
-            const form = document.getElementById(`edit-form-${tutorId}`);
-            if (form.style.display === "none") {
-                form.style.display = "table-row";
+            const editRow = document.getElementById(`edit-form-${tutorId}`);
+            const editFormDiv = editRow.querySelector('.edit-form'); // Select the div inside the row
+            if (editRow.style.display === "none") {
+                editRow.style.display = "table-row"; // Show the row
+                editFormDiv.style.display = "block"; // Show the form content
             } else {
-                form.style.display = "none";
+                editRow.style.display = "none"; // Hide the row
+                editFormDiv.style.display = "none"; // Hide the form content
             }
         }
     </script>

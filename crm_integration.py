@@ -183,8 +183,6 @@ async def get_group_clients_from_crm(group_id: str, branch: str = None) -> Optio
             response.raise_for_status()
             result = response.json()
 
-            print(response)
-
             customer_ids = [customer_id["customer_id"] for customer_id in result.get("items", [])]
             client_names = []
 
