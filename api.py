@@ -15,13 +15,13 @@ router = APIRouter()
 
 
 # Тестовый endpoint для проверки
-@router.get("/api/health")
+@router.get("/health/")
 async def health_check():
     return {"status": "ok", "message": "Backend is working"}
 
 
 # Ваши основные endpoints здесь
-@router.get("/api/test")
+@router.get("/test/")
 async def test_endpoint():
     return {"message": "Hello from FastAPI"}
 
