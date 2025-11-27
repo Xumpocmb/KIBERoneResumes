@@ -17,6 +17,9 @@ allowed_origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:8000",
+    "http://kiber-resume.of.by",
+    "https://kiber-resume.of.by",  # если есть HTTPS
+    "http://localhost:3000",  # для разработки
 ]
 
 app.add_middleware(
