@@ -13,6 +13,19 @@ from crm_integration import (
 
 router = APIRouter()
 
+
+# Тестовый endpoint для проверки
+@router.get("/api/health")
+async def health_check():
+    return {"status": "ok", "message": "Backend is working"}
+
+
+# Ваши основные endpoints здесь
+@router.get("/api/test")
+async def test_endpoint():
+    return {"message": "Hello from FastAPI"}
+
+
 # Tutor endpoints
 @router.post("/tutors/register/", response_model=schemas.TutorProfileResponse)
 async def register_tutor(
