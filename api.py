@@ -207,10 +207,11 @@ async def get_tutor_detail(
     if current_tutor.tutor_crm_id and current_tutor.branch:
         tutor_data = await get_tutor_data_from_crm(current_tutor.phone_number, current_tutor.branch)
         if tutor_data:
+            tutor_data["is_senior"] = current_tutor.is_senior
             return tutor_data
     
     # Fallback response if CRM integration fails
-    return {"tutor_detail": {}}
+    return {"tutor_detail": {"is_senior": current_tutor.is_senior}}
 
 
 # Tutor Management Endpoints (for senior tutors)
