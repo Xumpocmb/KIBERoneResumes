@@ -259,4 +259,4 @@ async def get_all_groups() -> Optional[Dict[str, Any]]:
                     # Handle request errors
                     break
     
-    return {"items": all_items, "total": len(all_items)}
+    return all_items
