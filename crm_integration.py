@@ -206,3 +206,57 @@ async def get_group_clients_from_crm(group_id: str, branch: str = None) -> Optio
         except httpx.RequestError:
             # Handle request errors
             return None
+
+
+async def get_all_groups() -> Optional[Dict[str, Any]]:
+    """
+    Get all groups from external CRM system
+    """
+    if not settings.crm_api_key:
+        return None
+    
+    # Get token for authentication
+    token = await login_to_alfa_crm()
+    if not token:
+        return None
+    
+    all_items = []
+    branches = [1, 2, 3, 4]  # Default to 1-4 if not specified
+    
+    headers = {**BASE_HEADERS, "X-ALFACRM-TOKEN": token}
+    
+    for branch in branches:
+        page = 0
+        
+        while True:
+            # Construct the URL for the current branch and page
+            url = f"{settings.crm_api_url}/v2api/{branch}/group/index"
+            data = {"page": page, "limit": 50}  # Assuming API supports pagination
+            
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.post(url, headers=headers, json=data)
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    items = result.get("items", [])
+                    current_page_count = len(items)
+                    total = result.get("total", 0)
+                    
+                    if current_page_count == 0:
+                        break  # No more data
+                    
+                    all_items.extend(items)
+                    page += 1
+                    
+                    # Additional protection: if we've collected all records
+                    if len(all_items) >= total > 0:
+                        break
+                except httpx.HTTPStatusError:
+                    # Handle HTTP errors
+                    break
+                except httpx.RequestError:
+                    # Handle request errors
+                    break
+    
+    return {"items": all_items, "total": len(all_items)}

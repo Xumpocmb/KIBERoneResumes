@@ -4,6 +4,7 @@ import models
 import schemas
 import auth
 from crm_integration import (
+    get_all_groups,
     get_tutor_data_from_crm,
     get_client_data_from_crm,
     get_tutor_groups_from_crm,
@@ -69,7 +70,11 @@ async def get_tutor_groups(
 ):
     # Integrate with CRM to get tutor's groups
     if current_tutor.tutor_crm_id and current_tutor.branch:
-        groups_data = await get_tutor_groups_from_crm(current_tutor.tutor_crm_id, current_tutor.branch)
+        
+        if current_tutor.is_senior:
+            groups_data = await get_all_groups()
+        else:
+            groups_data = await get_tutor_groups_from_crm(current_tutor.tutor_crm_id, current_tutor.branch)
         if groups_data:
             return groups_data
     
