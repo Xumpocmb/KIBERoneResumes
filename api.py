@@ -149,18 +149,41 @@ async def login_tutor(
 async def get_tutor_groups(
     current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
 ):
-    # Integrate with CRM to get tutor's groups
-    if current_tutor.tutor_crm_id and current_tutor.branch:
-        
-        if current_tutor.is_senior:
-            groups_data = await get_all_groups()
-        else:
-            groups_data = await get_tutor_groups_from_crm(current_tutor.tutor_crm_id, current_tutor.branch)
-        if groups_data:
-            return groups_data
-    
-    # Fallback response if CRM integration fails
-    return {"groups": []}
+    # Get tutor's groups from the database
+    if current_tutor.is_senior:
+        # Senior tutors can see all groups
+        groups = await models.Group.all()
+    else:
+        # Regular tutors see only their groups (based on tutor_crm_id)
+        # Find groups where the tutor is listed as a teacher by checking tutor_crm_id in the teacher_ids JSON field
+        groups = await models.Group.filter(
+            teacher_ids__contains=current_tutor.tutor_crm_id
+        ).all()
+
+    # Convert to the same format as the CRM response for consistency
+    groups_data = []
+    for group in groups:
+        # Create a format similar to what the CRM API returns
+        group_data = {
+            "id": group.crm_group_id,
+            "branch_ids": group.branch_ids,
+            "teacher_ids": group.teacher_ids,
+            "name": group.name,
+            "level_id": group.level_id,
+            "status_id": group.status_id,
+            "company_id": group.company_id,
+            "streaming_id": group.streaming_id,
+            "limit": group.limit,
+            "note": group.note,
+            "b_date": group.b_date,
+            "e_date": group.e_date,
+            "created_at": group.created_at,
+            "updated_at": group.updated_at,
+            "custom_aerodromnaya": group.custom_aerodromnaya
+        }
+        groups_data.append(group_data)
+
+    return groups_data if groups_data else {"groups": []}
 
 
 @router.get("/groups/clients/")
@@ -169,7 +192,7 @@ async def get_group_clients(
     current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
 ):
     if current_tutor.branch:
-        clients_data = await get_group_clients_from_crm(group_id, current_tutor.branch)
+        clients_data = await get_group_clients_from_crm(group_id, 2)
         if clients_data:
             return clients_data
 
@@ -425,4 +448,56 @@ async def sync_all_groups(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while synchronizing groups: {str(e)}"
+        )
+
+
+@router.get("/students/sync/", response_model=dict)
+async def sync_students_with_groups(
+    current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
+):
+    """
+    Fetch all students from CRM for each group and synchronize them with the database
+    Available only to senior tutors
+    """
+    try:
+        # Get all groups from the database
+        groups = await models.Group.all()
+
+        if not groups:
+            return {"message": "No groups found in database", "synced_count": 0}
+
+        total_synced = 0
+
+        for group in groups:
+            # Get students for this group from CRM
+            group_clients = await get_group_clients_from_crm(str(group.crm_group_id), current_tutor.branch)
+
+            if group_clients:
+                for client in group_clients:
+                    customer_id = client.get("customer_id")
+                    client_name = client.get("client_name")
+
+                    if customer_id and client_name:
+                        # Create or update student record with group relationship
+                        student, created = await models.Student.get_or_create(
+                            student_crm_id=customer_id,
+                            defaults={
+                                "student_name": client_name,
+                                "group_id": group.id
+                            }
+                        )
+
+                        # If student already exists, update the group relationship
+                        if not created and student.group_id != group.id:
+                            student.group_id = group.id
+                            await student.save()
+
+                        total_synced += 1
+
+        return {"message": f"Successfully synchronized {total_synced} students", "synced_count": total_synced}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while synchronizing students: {str(e)}"
         )

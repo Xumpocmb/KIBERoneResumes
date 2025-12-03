@@ -62,3 +62,10 @@ class Group(Model):
 
     # Relationship to tutors (many-to-many through a separate model if needed)
     tutors = fields.ManyToManyField('models.TutorProfile', related_name='groups', null=True)
+
+
+class Student(Model):
+    id = fields.IntField(pk=True)
+    student_crm_id = fields.IntField(unique=True)  # Corresponds to "customer_id" in the JSON
+    student_name = fields.CharField(max_length=255)  # Corresponds to "client_name" in the JSON
+    group = fields.ForeignKeyField('models.Group', related_name='students', null=True, on_delete=fields.CASCADE)
