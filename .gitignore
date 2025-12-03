@@ -167,3 +167,4 @@ migrations/models/*_init.py
 
 fixtures
 secrets
+responses

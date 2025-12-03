@@ -9,6 +9,19 @@ class TutorProfileBase(BaseModel):
     tutor_name: Optional[str] = None
     branch: Optional[str] = None
     is_senior: bool = False
+    # Additional fields from CRM
+    branch_ids: Optional[list] = None
+    dob: Optional[str] = None
+    gender: Optional[int] = None
+    streaming_id: Optional[int] = None
+    note: Optional[str] = None
+    e_date: Optional[str] = None
+    avatar_url: Optional[str] = None
+    phone: Optional[list] = None
+    email: Optional[list] = None
+    web: Optional[list] = None
+    addr: Optional[list] = None
+    teacher_to_skill: Optional[dict] = None
 
 
 class TutorProfileCreate(TutorProfileBase):
@@ -25,6 +38,19 @@ class TutorProfileUpdate(BaseModel):
     tutor_name: Optional[str] = None
     branch: Optional[str] = None
     is_senior: Optional[bool] = None
+    # Additional fields from CRM
+    branch_ids: Optional[list] = None
+    dob: Optional[str] = None
+    gender: Optional[int] = None
+    streaming_id: Optional[int] = None
+    note: Optional[str] = None
+    e_date: Optional[str] = None
+    avatar_url: Optional[str] = None
+    phone: Optional[list] = None
+    email: Optional[list] = None
+    web: Optional[list] = None
+    addr: Optional[list] = None
+    teacher_to_skill: Optional[dict] = None
 
 
 class TutorProfileResponse(TutorProfileBase):

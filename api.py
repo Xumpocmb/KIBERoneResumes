@@ -31,33 +31,74 @@ async def test_endpoint():
 async def register_tutor(
     register_data: schemas.TutorRegisterRequest
 ):
-    existing_phone_tutor = await auth.get_tutor_by_phone_number(register_data.phone_number)
-    if existing_phone_tutor:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phone number already registered"
+    try:
+        existing_phone_tutor = await auth.get_tutor_by_phone_number(register_data.phone_number)
+        if existing_phone_tutor:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered"
+            )
+
+        tutor_data = await get_tutor_data_from_crm(register_data.phone_number, register_data.tutor_branch_id)
+
+        if not tutor_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tutor not found in CRM"
+            )
+
+        # Extract all fields from CRM data with proper error handling
+        tutor_crm_id = tutor_data.get("id", None)
+        tutor_name = tutor_data.get("name", None)
+        branch_ids = tutor_data.get("branch_ids", None)
+        dob = tutor_data.get("dob", None)
+        gender = tutor_data.get("gender", None)
+        streaming_id = tutor_data.get("streaming_id", None)
+        note = tutor_data.get("note", None)
+        e_date = tutor_data.get("e_date", None)
+        avatar_url = tutor_data.get("avatar_url", None)
+        phone = tutor_data.get("phone", None)
+        email = tutor_data.get("email", None)
+        web = tutor_data.get("web", None)
+        addr = tutor_data.get("addr", None)
+        teacher_to_skill = tutor_data.get("teacher-to-skill", None)
+
+        # Validate required fields to avoid potential database errors
+        if tutor_crm_id is not None:
+            tutor_crm_id = int(tutor_crm_id) if str(tutor_crm_id).isdigit() else None
+
+        # Create or update tutor profile with all CRM data
+        db_tutor = await models.TutorProfile.create(
+            tutor_crm_id=tutor_crm_id,
+            tutor_name=tutor_name,
+            branch=register_data.tutor_branch_id,
+            is_senior=True,
+            phone_number=register_data.phone_number,
+            # Additional fields from CRM
+            branch_ids=branch_ids,
+            dob=dob,
+            gender=gender,
+            streaming_id=streaming_id,
+            note=note,
+            e_date=e_date,
+            avatar_url=avatar_url,
+            phone=phone,
+            email=email,
+            web=web,
+            addr=addr,
+            teacher_to_skill=teacher_to_skill
         )
 
-    tutor_data = await get_tutor_data_from_crm(register_data.phone_number, register_data.tutor_branch_id)
-
-    if not tutor_data:
+        return db_tutor
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are
+        raise
+    except Exception as e:
+        # Handle any unexpected errors
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tutor not found in CRM"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while registering tutor: {str(e)}"
         )
-
-    tutor_crm_id = tutor_data.get("id", None)
-    tutor_name = tutor_data.get("name", None)
-
-    db_tutor = await models.TutorProfile.create(
-        tutor_crm_id=tutor_crm_id,
-        tutor_name=tutor_name,
-        branch=register_data.tutor_branch_id,
-        is_senior=False,
-        phone_number=register_data.phone_number
-    )
-
-    return db_tutor
 
 
 @router.post("/tutors/login/", response_model=schemas.Token)

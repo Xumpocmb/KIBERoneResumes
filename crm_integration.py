@@ -214,14 +214,14 @@ async def get_all_groups() -> Optional[Dict[str, Any]]:
     """
     if not settings.crm_api_key:
         return None
-    
+
     # Get token for authentication
     token = await login_to_alfa_crm()
     if not token:
         return None
     
     all_items = []
-    branches = [1, 2, 3, 4]  # Default to 1-4 if not specified
+    branches = [1, 2, 3, 4]
     
     headers = {**BASE_HEADERS, "X-ALFACRM-TOKEN": token}
     
