@@ -112,7 +112,34 @@ async def login_tutor(
             detail="Incorrect phone number",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    # Get updated tutor data from CRM and update DB record
+    if tutor.branch:
+        tutor_data = await get_tutor_data_from_crm(tutor.phone_number, tutor.branch)
+        if tutor_data:
+            # Update tutor profile with latest CRM data
+            update_data = {}
+            update_data["tutor_crm_id"] = tutor_data.get("id")
+            update_data["tutor_name"] = tutor_data.get("name")
+            update_data["branch_ids"] = tutor_data.get("branch_ids")
+            update_data["dob"] = tutor_data.get("dob")
+            update_data["gender"] = tutor_data.get("gender")
+            update_data["streaming_id"] = tutor_data.get("streaming_id")
+            update_data["note"] = tutor_data.get("note")
+            update_data["e_date"] = tutor_data.get("e_date")
+            update_data["avatar_url"] = tutor_data.get("avatar_url")
+            update_data["phone"] = tutor_data.get("phone")
+            update_data["email"] = tutor_data.get("email")
+            update_data["web"] = tutor_data.get("web")
+            update_data["addr"] = tutor_data.get("addr")
+            update_data["teacher_to_skill"] = tutor_data.get("teacher-to-skill")
+
+            # Update the tutor record with new CRM data
+            for field, value in update_data.items():
+                setattr(tutor, field, value)
+
+            await tutor.save()
+
     # Since we don't have username, we'll use phone number as the subject
     access_token = auth.create_access_token(data={"sub": tutor.phone_number})
     return {"access_token": access_token, "token_type": "bearer"}
@@ -262,15 +289,25 @@ async def get_parent_reviews(
 async def get_tutor_detail(
     current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
 ):
-    # Integrate with CRM to get tutor details
-    if current_tutor.tutor_crm_id and current_tutor.branch:
-        tutor_data = await get_tutor_data_from_crm(current_tutor.phone_number, current_tutor.branch)
-        if tutor_data:
-            tutor_data["is_senior"] = current_tutor.is_senior
-            return tutor_data
-    
-    # Fallback response if CRM integration fails
-    return {"tutor_detail": {"is_senior": current_tutor.is_senior}}
+    # Return tutor details from the local database
+    return {
+        "id": current_tutor.tutor_crm_id,
+        "name": current_tutor.tutor_name,
+        "branch_ids": current_tutor.branch_ids,
+        "branch": current_tutor.branch,
+        "dob": current_tutor.dob,
+        "gender": current_tutor.gender,
+        "streaming_id": current_tutor.streaming_id,
+        "note": current_tutor.note,
+        "e_date": current_tutor.e_date,
+        "avatar_url": current_tutor.avatar_url,
+        "phone": current_tutor.phone,
+        "email": current_tutor.email,
+        "web": current_tutor.web,
+        "addr": current_tutor.addr,
+        "teacher-to-skill": current_tutor.teacher_to_skill,
+        "is_senior": current_tutor.is_senior
+    }
 
 
 # Tutor Management Endpoints (for senior tutors)
@@ -303,6 +340,89 @@ async def get_client_detail(
         client_data = await get_client_data_from_crm(student_crm_id, current_tutor.branch)
         if client_data:
             return client_data
-    
+
     # Fallback response if CRM integration fails
     return {"client_detail": {}}
+
+
+# Group endpoints
+@router.get("/groups/sync/", response_model=dict)
+async def sync_all_groups(
+    current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
+):
+    """
+    Fetch all groups from CRM and synchronize them with the database
+    Available only to senior tutors
+    """
+    try:
+        groups_data = await get_all_groups()
+        if not groups_data:
+            return {"message": "No groups found in CRM", "synced_count": 0}
+
+        synced_count = 0
+        for group_data in groups_data:
+            # Extract fields from CRM data
+            crm_group_id = group_data.get("id")
+            branch_ids = group_data.get("branch_ids")
+            teacher_ids = group_data.get("teacher_ids")
+            name = group_data.get("name")
+            level_id = group_data.get("level_id")
+            status_id = group_data.get("status_id")
+            company_id = group_data.get("company_id")
+            streaming_id = group_data.get("streaming_id")
+            limit = group_data.get("limit")
+            note = group_data.get("note")
+            b_date = group_data.get("b_date")
+            e_date = group_data.get("e_date")
+            created_at = group_data.get("created_at")
+            updated_at = group_data.get("updated_at")
+            custom_aerodromnaya = group_data.get("custom_aerodromnaya")
+
+            # Try to get existing group or create new one
+            group, created = await models.Group.get_or_create(
+                crm_group_id=crm_group_id,
+                defaults={
+                    "branch_ids": branch_ids,
+                    "teacher_ids": teacher_ids,
+                    "name": name,
+                    "level_id": level_id,
+                    "status_id": status_id,
+                    "company_id": company_id,
+                    "streaming_id": streaming_id,
+                    "limit": limit,
+                    "note": note,
+                    "b_date": b_date,
+                    "e_date": e_date,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                    "custom_aerodromnaya": custom_aerodromnaya
+                }
+            )
+
+            # If the group already existed, update its fields
+            if not created:
+                group.branch_ids = branch_ids
+                group.teacher_ids = teacher_ids
+                group.name = name
+                group.level_id = level_id
+                group.status_id = status_id
+                group.company_id = company_id
+                group.streaming_id = streaming_id
+                group.limit = limit
+                group.note = note
+                group.b_date = b_date
+                group.e_date = e_date
+                group.created_at = created_at
+                group.updated_at = updated_at
+                group.custom_aerodromnaya = custom_aerodromnaya
+                await group.save()
+
+            synced_count += 1
+
+        return {"message": f"Successfully synchronized {synced_count} groups", "synced_count": synced_count}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while synchronizing groups: {str(e)}"
+        )
