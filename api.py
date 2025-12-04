@@ -3,13 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 import models
 import schemas
 import auth
-from crm_integration import (
-    get_all_groups,
-    get_tutor_data_from_crm,
-    get_client_data_from_crm,
-    get_tutor_groups_from_crm,
-    get_group_clients_from_crm
-)
+from crm_integration import get_all_groups, get_tutor_data_from_crm, get_client_data_from_crm, get_tutor_groups_from_crm, get_group_clients_from_crm
 
 router = APIRouter()
 
@@ -28,24 +22,16 @@ async def test_endpoint():
 
 # Tutor endpoints
 @router.post("/tutors/register/", response_model=schemas.TutorProfileResponse)
-async def register_tutor(
-    register_data: schemas.TutorRegisterRequest
-):
+async def register_tutor(register_data: schemas.TutorRegisterRequest):
     try:
         existing_phone_tutor = await auth.get_tutor_by_phone_number(register_data.phone_number)
         if existing_phone_tutor:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone number already registered"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone number already registered")
 
         tutor_data = await get_tutor_data_from_crm(register_data.phone_number, register_data.tutor_branch_id)
 
         if not tutor_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Tutor not found in CRM"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tutor not found in CRM")
 
         # Extract all fields from CRM data with proper error handling
         tutor_crm_id = tutor_data.get("id", None)
@@ -86,7 +72,7 @@ async def register_tutor(
             email=email,
             web=web,
             addr=addr,
-            teacher_to_skill=teacher_to_skill
+            teacher_to_skill=teacher_to_skill,
         )
 
         return db_tutor
@@ -95,16 +81,11 @@ async def register_tutor(
         raise
     except Exception as e:
         # Handle any unexpected errors
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while registering tutor: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while registering tutor: {str(e)}")
 
 
 @router.post("/tutors/login/", response_model=schemas.Token)
-async def login_tutor(
-    tutor_login: schemas.TutorLogin
-):
+async def login_tutor(tutor_login: schemas.TutorLogin):
     tutor = await auth.authenticate_tutor(tutor_login.phone_number)
     if not tutor:
         raise HTTPException(
@@ -146,9 +127,7 @@ async def login_tutor(
 
 
 @router.get("/tutors/groups/")
-async def get_tutor_groups(
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def get_tutor_groups(current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     # Get tutor's groups from the database
     if current_tutor.is_senior:
         # Senior tutors can see all groups
@@ -156,9 +135,7 @@ async def get_tutor_groups(
     else:
         # Regular tutors see only their groups (based on tutor_crm_id)
         # Find groups where the tutor is listed as a teacher by checking tutor_crm_id in the teacher_ids JSON field
-        groups = await models.Group.filter(
-            teacher_ids__contains=current_tutor.tutor_crm_id
-        ).all()
+        groups = await models.Group.filter(teacher_ids__contains=current_tutor.tutor_crm_id).all()
 
     # Convert to the same format as the CRM response for consistency
     groups_data = []
@@ -179,7 +156,7 @@ async def get_tutor_groups(
             "e_date": group.e_date,
             "created_at": group.created_at,
             "updated_at": group.updated_at,
-            "custom_aerodromnaya": group.custom_aerodromnaya
+            "custom_aerodromnaya": group.custom_aerodromnaya,
         }
         groups_data.append(group_data)
 
@@ -187,67 +164,68 @@ async def get_tutor_groups(
 
 
 @router.get("/groups/clients/")
-async def get_group_clients(
-    group_id: str,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
-    if current_tutor.branch:
-        clients_data = await get_group_clients_from_crm(group_id, 2)
-        if clients_data:
-            return clients_data
+async def get_group_clients(group_id: str, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
+    # Get students for the group from the database
+    try:
+        # Convert group_id to integer for database query
+        group_id_int = int(group_id)
 
-    return {"clients": []}
+        # Get the group from database
+        group = await models.Group.get_or_none(id=group_id_int)
+        if not group:
+            return {"clients": []}
+
+        # Get all students associated with this group
+        students = await models.Student.filter(group=group).all()
+
+        # Format the response to match the expected structure
+        clients_data = []
+        for student in students:
+            client_data = {"customer_id": student.student_crm_id, "client_name": student.student_name}
+            clients_data.append(client_data)
+
+        return clients_data if clients_data else {"clients": []}
+    except ValueError:
+        # Handle case where group_id is not a valid integer
+        return {"clients": []}
+    except Exception as e:
+        # Handle any other errors
+        return {"clients": []}
 
 
 # Resume endpoints
 @router.get("/resumes/client/", response_model=List[schemas.ResumeResponse])
-async def get_client_resumes(
-    student_crm_id: str,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def get_client_resumes(student_crm_id: str, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     """Get resumes for a specific client."""
     resumes = await models.Resume.filter(student_crm_id=student_crm_id)
     return resumes
 
 
 @router.post("/resumes/{resume_id}/", response_model=schemas.ResumeResponse)
-async def update_resume(
-    resume_id: int,
-    resume_update: schemas.ResumeUpdate,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def update_resume(resume_id: int, resume_update: schemas.ResumeUpdate, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     """Update a specific resume."""
     resume = await models.Resume.get_or_none(id=resume_id)
-    
+
     if not resume:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resume not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
+
     # Update the resume
     update_data = resume_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(resume, field, value)
-    
+
     await resume.save()
     return resume
 
 
 @router.post("/resumes/{resume_id}/verify/", response_model=schemas.ResumeResponse)
-async def verify_resume(
-    resume_id: int,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
-):
+async def verify_resume(resume_id: int, current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)):
     """Verify a specific resume (requires senior tutor)."""
     resume = await models.Resume.get_or_none(id=resume_id)
-    
+
     if not resume:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resume not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
+
     # Update the resume verification status
     resume.is_verified = True
     await resume.save()
@@ -255,53 +233,35 @@ async def verify_resume(
 
 
 @router.get("/resumes/unverified/", response_model=List[schemas.ResumeResponse])
-async def get_unverified_resumes(
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def get_unverified_resumes(current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     """Get all unverified resumes."""
     resumes = await models.Resume.filter(is_verified=False)
     return resumes
 
 
 @router.post("/resumes/", response_model=schemas.ResumeResponse)
-async def create_resume(
-    resume: schemas.ResumeCreate,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def create_resume(resume: schemas.ResumeCreate, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     """Create a new resume."""
-    db_resume = await models.Resume.create(
-        student_crm_id=resume.student_crm_id,
-        content=resume.content,
-        is_verified=resume.is_verified
-    )
-    
+    db_resume = await models.Resume.create(student_crm_id=resume.student_crm_id, content=resume.content, is_verified=resume.is_verified)
+
     return db_resume
 
 
 @router.delete("/resumes/{resume_id}/")
-async def delete_resume(
-    resume_id: int,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def delete_resume(resume_id: int, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     """Delete a specific resume."""
     resume = await models.Resume.get_or_none(id=resume_id)
-    
+
     if not resume:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resume not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found")
+
     await resume.delete()
     return {"message": "Resume deleted successfully"}
 
 
 # Review endpoints
 @router.get("/reviews/{student_crm_id}/", response_model=List[schemas.ParentReviewResponse])
-async def get_parent_reviews(
-    student_crm_id: str,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def get_parent_reviews(student_crm_id: str, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     """Get parent reviews for a specific student."""
     reviews = await models.ParentReview.filter(student_crm_id=student_crm_id)
     return reviews
@@ -309,9 +269,7 @@ async def get_parent_reviews(
 
 # Tutor endpoints (additional)
 @router.get("/tutors/detail/")
-async def get_tutor_detail(
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def get_tutor_detail(current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     # Return tutor details from the local database
     return {
         "id": current_tutor.tutor_crm_id,
@@ -329,24 +287,18 @@ async def get_tutor_detail(
         "web": current_tutor.web,
         "addr": current_tutor.addr,
         "teacher-to-skill": current_tutor.teacher_to_skill,
-        "is_senior": current_tutor.is_senior
+        "is_senior": current_tutor.is_senior,
     }
 
 
 # Tutor Management Endpoints (for senior tutors)
 @router.post("/tutors/{tutor_id}/promote-to-senior/", response_model=schemas.TutorProfileResponse)
-async def promote_to_senior(
-    tutor_id: int,
-    current_senior_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
-):
+async def promote_to_senior(tutor_id: int, current_senior_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)):
     """Promote a tutor to senior status (requires an existing senior tutor)."""
     tutor = await models.TutorProfile.get_or_none(id=tutor_id)
     if not tutor:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tutor not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tutor not found")
+
     tutor.is_senior = True
     await tutor.save()
     return tutor
@@ -354,10 +306,7 @@ async def promote_to_senior(
 
 # Client endpoints
 @router.get("/clients/detail/")
-async def get_client_detail(
-    student_crm_id: str,
-    current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)
-):
+async def get_client_detail(student_crm_id: str, current_tutor: models.TutorProfile = Depends(auth.get_current_active_tutor)):
     # Integrate with CRM to get client details
     if current_tutor.branch:
         client_data = await get_client_data_from_crm(student_crm_id, current_tutor.branch)
@@ -370,9 +319,7 @@ async def get_client_detail(
 
 # Group endpoints
 @router.get("/groups/sync/", response_model=dict)
-async def sync_all_groups(
-    current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
-):
+async def sync_all_groups(current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)):
     """
     Fetch all groups from CRM and synchronize them with the database
     Available only to senior tutors
@@ -418,8 +365,8 @@ async def sync_all_groups(
                     "e_date": e_date,
                     "created_at": created_at,
                     "updated_at": updated_at,
-                    "custom_aerodromnaya": custom_aerodromnaya
-                }
+                    "custom_aerodromnaya": custom_aerodromnaya,
+                },
             )
 
             # If the group already existed, update its fields
@@ -445,16 +392,11 @@ async def sync_all_groups(
         return {"message": f"Successfully synchronized {synced_count} groups", "synced_count": synced_count}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while synchronizing groups: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while synchronizing groups: {str(e)}")
 
 
 @router.get("/students/sync/", response_model=dict)
-async def sync_students_with_groups(
-    current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)
-):
+async def sync_students_with_groups(current_tutor: models.TutorProfile = Depends(auth.get_current_senior_tutor)):
     """
     Fetch all students from CRM for each group and synchronize them with the database
     Available only to senior tutors
@@ -479,13 +421,7 @@ async def sync_students_with_groups(
 
                     if customer_id and client_name:
                         # Create or update student record with group relationship
-                        student, created = await models.Student.get_or_create(
-                            student_crm_id=customer_id,
-                            defaults={
-                                "student_name": client_name,
-                                "group_id": group.id
-                            }
-                        )
+                        student, created = await models.Student.get_or_create(student_crm_id=customer_id, defaults={"student_name": client_name, "group_id": group.id})
 
                         # If student already exists, update the group relationship
                         if not created and student.group_id != group.id:
@@ -497,7 +433,4 @@ async def sync_students_with_groups(
         return {"message": f"Successfully synchronized {total_synced} students", "synced_count": total_synced}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while synchronizing students: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred while synchronizing students: {str(e)}")
