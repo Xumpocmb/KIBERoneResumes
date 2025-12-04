@@ -58,7 +58,7 @@ async def register_tutor(register_data: schemas.TutorRegisterRequest):
             tutor_crm_id=tutor_crm_id,
             tutor_name=tutor_name,
             branch=register_data.tutor_branch_id,
-            is_senior=True,
+            is_senior=False,
             phone_number=register_data.phone_number,
             # Additional fields from CRM
             branch_ids=branch_ids,
